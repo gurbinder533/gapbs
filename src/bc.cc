@@ -100,6 +100,7 @@ pvector<ScoreT> Brandes(const Graph &g, SourcePicker<Graph> &sp,
   t.Stop();
   PrintStep("a", t.Seconds());
   const NodeID* g_out_start = g.out_neigh(0).begin();
+  std::cout << "num iter : " << num_iters << "\n"; 
   for (NodeID iter=0; iter < num_iters; iter++) {
     NodeID source = sp.PickNext();
     cout << "source: " << source << endl;
@@ -229,7 +230,7 @@ int main(int argc, char* argv[]) {
   if (cli.num_iters() > 1 && cli.start_vertex() != -1)
     cout << "Warning: iterating from same source (-r & -i)" << endl;
   Builder b(cli);
-  Graph g = b.MakeGraph();
+  Graph g = b.MakeGraph(false);
   SourcePicker<Graph> sp(g, cli.start_vertex());
   auto BCBound =
     [&sp, &cli] (const Graph &g) { return Brandes(g, sp, cli.num_iters()); };

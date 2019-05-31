@@ -19,6 +19,7 @@ Vector class with ability to not initialize or do initialize in parallel
 */
 
 
+#include <sys/mman.h>
 template <typename T_>
 class pvector {
  public:
@@ -27,7 +28,15 @@ class pvector {
   pvector() : start_(nullptr), end_size_(nullptr), end_capacity_(nullptr) {}
 
   explicit pvector(size_t num_elements) {
-    start_ = new T_[num_elements];
+    static const int _MAP_HG   = MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB| MAP_POPULATE;
+    const int _PROT = PROT_READ | PROT_WRITE;
+    size_t size = num_elements*sizeof(T_);
+    start_ = (T_*)mmap(0, size, _PROT, _MAP_HG, -1, 0);
+    if(!start_){
+      std::cerr <<"MMAP failed \n";
+    }
+
+    //start_ = new T_[num_elements];
     end_size_ = start_ + num_elements;
     end_capacity_ = end_size_;
   }
@@ -67,8 +76,8 @@ class pvector {
   }
 
   ~pvector() {
-    if (start_ != nullptr)
-      delete[] start_;
+    //if (start_ != nullptr)
+      //delete[] start_;
   }
 
   // not thread-safe

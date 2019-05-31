@@ -66,7 +66,6 @@ class Reader {
     return el;
   }
 
-  // Note: converts vertex numbering from 1..N to 0..N-1
   EdgeList ReadInGR(std::ifstream &in) {
     EdgeList el;
     char c;
@@ -76,13 +75,210 @@ class Reader {
       c = in.peek();
       if (c == 'a') {
         in >> c >> u >> v;
-        el.push_back(Edge(u - 1, NodeWeight<NodeID_, WeightT_>(v.v-1, v.w)));
+        std::cout << "c : " << c << " u : " << u << " v : " << v << "\n";
+        el.push_back(Edge(u, v));
       } else {
         in.ignore(200, '\n');
       }
     }
     return el;
   }
+
+
+  EdgeList ReadInGGR2(std::ifstream &in) {
+
+    Timer timer_ggr;
+    timer_ggr.Start();
+    uint64_t header[4];
+    in.read(reinterpret_cast<char*>(header), sizeof(uint64_t) * 4);
+    uint64_t version = header[0];
+    uint32_t numNodes = header[2];
+    uint64_t numEdges = header[3];
+    std::cout<<"Disk: NumNodes: "<<numNodes<<" NumEdges: "<<numEdges<<"\n";
+    std::cerr<<"Disk: NumNodes: "<<numNodes<<" NumEdges: "<<numEdges<<"\n";
+
+    EdgeList el(numEdges);
+    char c;
+    NodeID_ u;
+    NodeWeight<NodeID_, WeightT_> v;
+
+    std::vector<uint64_t> edgeIndData(numNodes);
+    uint64_t readPosition = (4 * sizeof(uint64_t));
+    in.read(reinterpret_cast<char*>(&edgeIndData[0]), sizeof(uint64_t)*numNodes);
+
+    std::vector<NodeID_> edgeDst;
+    readPosition = ((4 + numNodes) * sizeof(uint64_t));
+    in.seekg(readPosition);
+    std::cout << "version = " << version << "\n";
+    std::cerr << "version = " << version << "\n";
+#if 0
+    if(version == 1) {
+      in.read(reinterpret_cast<char*>(&edgeDst[0]), sizeof(uint32_t)*numEdges);
+      readPosition = ((4 + numNodes) * sizeof(uint64_t) + numEdges * sizeof(uint32_t));
+     // version 1 padding TODO make version agnostic
+      if (numEdges% 2) {
+        readPosition += sizeof(uint32_t);
+      }
+    } else if(version == 2) {
+      in.read(reinterpret_cast<char*>(&edgeDst[0]), sizeof(uint64_t)*numEdges);
+      readPosition = ((4 + numNodes) * sizeof(uint64_t) + numEdges * sizeof(uint64_t));
+      if (numEdges % 2) {
+        readPosition += sizeof(uint64_t);
+      }
+    } else {
+      std::cerr << "ERROR: Unknown graph file version.\n";
+      abort();
+    }
+
+    std::vector<WeightT_> edgeWt(numEdges);
+    in.seekg(readPosition);
+    in.read(reinterpret_cast<char*>(&edgeWt[0]), sizeof(WeightT_)*numEdges);
+    timer_ggr.Stop();
+    PrintTime("Disk Read Time", timer_ggr.Seconds());
+#endif
+    std::cerr<< "Done reading from disk. Starting el filling loop\n";
+
+    uint32_t vecSize = 1000000;
+    edgeDst.resize(vecSize);
+    uint64_t edges = 0;
+    for(NodeID_ src = 0; src < numNodes; ++src){
+      uint64_t ii,ie;
+      if(src == 0){
+        ii = 0;
+        ie = edgeIndData[0];
+      } else {
+        ii = edgeIndData[src-1];
+        ie = edgeIndData[src];
+      }
+      uint64_t local_numEdges = ie - ii;
+      if(local_numEdges > 0) {
+        uint32_t tiles = local_numEdges/vecSize;
+        if(local_numEdges%vecSize != 0 )
+          tiles += 1;
+        for (auto t = 0; t < tiles-1; ++t){
+          in.read(reinterpret_cast<char*>(&edgeDst[0]), sizeof(uint32_t)*vecSize);
+          //readPosition = ((4 + numNodes) * sizeof(uint64_t) + local_numEdges * sizeof(uint32_t));
+          //in.seekg(readPosition);
+          //for(; ii < ie; ++ii){
+          for(auto i = 0; i < vecSize; ++i){
+            edges++;
+            //el.push_back(Edge(src, NodeWeight<NodeID_, WeightT_>{edgeDst[i], 1}));
+            el.push_back(Edge(src, edgeDst[i]));
+          }
+        }
+
+        if(local_numEdges - (tiles-1)*vecSize != 0){
+          uint32_t remaining = local_numEdges - (tiles-1)*vecSize;
+          in.read(reinterpret_cast<char*>(&edgeDst[0]), sizeof(uint32_t)*remaining);
+          for(auto i = 0; i < remaining; ++i){
+            //el.push_back(Edge(src, NodeWeight<NodeID_, WeightT_>{edgeDst[i], 1}));
+            edges++;
+            el.push_back(Edge(src, edgeDst[i]));
+          }
+        }
+      }
+    }
+      std::cerr << "EDGED  : " << edges << "\n";
+    std::cerr << "Done filling el\n";
+    return el;
+  }
+
+
+  EdgeList ReadInGGR(std::ifstream &in) {
+
+    Timer timer_ggr;
+    timer_ggr.Start();
+    uint64_t header[4];
+    in.read(reinterpret_cast<char*>(header), sizeof(uint64_t) * 4);
+    uint64_t version = header[0];
+    uint32_t numNodes = header[2];
+    uint64_t numEdges = header[3];
+    std::cout<<"Disk: NumNodes: "<<numNodes<<" NumEdges: "<<numEdges<<"\n";
+    std::cerr<<"Disk: NumNodes: "<<numNodes<<" NumEdges: "<<numEdges<<"\n";
+
+    EdgeList el;
+    char c;
+    NodeID_ u;
+    NodeWeight<NodeID_, WeightT_> v;
+
+    std::vector<uint64_t> edgeIndData(numNodes);
+    uint64_t readPosition = (4 * sizeof(uint64_t));
+    in.read(reinterpret_cast<char*>(&edgeIndData[0]), sizeof(uint64_t)*numNodes);
+
+    std::vector<NodeID_> edgeDst(numEdges);
+    readPosition = ((4 + numNodes) * sizeof(uint64_t));
+    in.seekg(readPosition);
+    std::cout << "version = " << version << "\n";
+    std::cerr << "version = " << version << "\n";
+    if(version == 1) {
+      in.read(reinterpret_cast<char*>(&edgeDst[0]), sizeof(uint32_t)*numEdges);
+      readPosition = ((4 + numNodes) * sizeof(uint64_t) + numEdges * sizeof(uint32_t));
+     // version 1 padding TODO make version agnostic
+      if (numEdges% 2) {
+        readPosition += sizeof(uint32_t);
+      }
+    } else if(version == 2) {
+      in.read(reinterpret_cast<char*>(&edgeDst[0]), sizeof(uint64_t)*numEdges);
+      readPosition = ((4 + numNodes) * sizeof(uint64_t) + numEdges * sizeof(uint64_t));
+      if (numEdges % 2) {
+        readPosition += sizeof(uint64_t);
+      }
+    } else {
+      std::cerr << "ERROR: Unknown graph file version.\n";
+      abort();
+    }
+
+    std::vector<WeightT_> edgeWt(numEdges);
+    in.seekg(readPosition);
+    in.read(reinterpret_cast<char*>(&edgeWt[0]), sizeof(WeightT_)*numEdges);
+    timer_ggr.Stop();
+    PrintTime("Disk Read Time", timer_ggr.Seconds());
+
+    std::cerr<< "Done reading from disk. Starting el filling loop\n";
+
+    for(NodeID_ src = 0; src < numNodes; ++src){
+      uint64_t ii,ie;
+      if(src == 0){
+        ii = 0;
+        ie = edgeIndData[0];
+      } else {
+        ii = edgeIndData[src-1];
+        ie = edgeIndData[src];
+      }
+      for(; ii < ie; ++ii){
+        el.push_back(Edge(src, NodeWeight<NodeID_, WeightT_>{edgeDst[ii], edgeWt[ii]}));
+      }
+    }
+    std::cerr << "Done filling el\n";
+    return el;
+
+#if 0
+    uint64_t readPosition = (4 * sizeof(uint64_t));
+    in.seekg(readPosition);
+
+    size_t BUFFER_SIZE = 1000000;
+    for(NodeID_ src = 0; src < numNodes; src+=BUFFER_SIZE){
+      std::vector<uint64_t> edgeInData(BUFFER_SIZE);
+      std::vector<NodeID_> edgeDst(BUFFER_SIZE);
+      std::vector<WeightT_> edgeDst(BUFFER_SIZE);
+      in.read(reinterpret_cast<char*>(edgeIndData, sizeof(uint64_t)*BUFFER_SIZE);
+      for()
+    }
+
+    while (!in.eof()) {
+      c = in.peek();
+      if (c == 'a') {
+        in >> c >> u >> v;
+        std::cout << "c : " << c << " u : " << u << " v : " << v << "\n";
+        el.push_back(Edge(u, v));
+      } else {
+        in.ignore(200, '\n');
+      }
+    }
+    return el;
+#endif
+  }
+
 
   // Note: converts vertex numbering from 1..N to 0..N-1
   EdgeList ReadInMetis(std::ifstream &in, bool &needs_weights) {
@@ -232,9 +428,11 @@ class Reader {
     } else if (suffix == ".wel") {
       needs_weights = false;
       el = ReadInWEL(file);
-    } else if (suffix == ".gr") {
+    } else if (suffix == ".gr"||suffix == ".sgr") {
       needs_weights = false;
-      el = ReadInGR(file);
+      //el = ReadInGR(file);
+      el = ReadInGGR(file);
+      //el = ReadInGGR2(file);
     } else if (suffix == ".graph") {
       el = ReadInMetis(file, needs_weights);
     } else if (suffix == ".mtx") {

@@ -87,8 +87,9 @@ pvector<NodeID> ShiloachVishkin(const Graph &g) {
 void PrintCompStats(const Graph &g, const pvector<NodeID> &comp) {
   cout << endl;
   unordered_map<NodeID, NodeID> count;
-  for (NodeID comp_i : comp)
+  for (NodeID comp_i : comp){
     count[comp_i] += 1;
+  }
   int k = 5;
   vector<pair<NodeID, NodeID>> count_vector;
   count_vector.reserve(count.size());
@@ -99,7 +100,8 @@ void PrintCompStats(const Graph &g, const pvector<NodeID> &comp) {
   cout << k << " biggest clusters" << endl;
   for (auto kvp : top_k)
     cout << kvp.second << ":" << kvp.first << endl;
-  cout << "There are " << count.size() << " components" << endl;
+  cout << "There are " << count.size() << " components (excluding isolated nodes)" << endl;
+
 }
 
 
@@ -109,6 +111,11 @@ void PrintCompStats(const Graph &g, const pvector<NodeID> &comp) {
 // - Asserts every vertex is visited (degree-0 vertex should have own label)
 bool CCVerifier(const Graph &g, const pvector<NodeID> &comp) {
   unordered_map<NodeID, NodeID> label_to_source;
+  std::cout << "Printing complete output\n";
+  std::ofstream outfile ("output_cc_sv.txt");
+  for (NodeID n : g.vertices()) {
+    outfile << n << " " << comp[n] << "\n";
+  }
   for (NodeID n : g.vertices())
     label_to_source[comp[n]] = n;
   Bitmap visited(g.num_nodes());
@@ -155,7 +162,7 @@ int main(int argc, char* argv[]) {
   if (!cli.ParseArgs())
     return -1;
   Builder b(cli);
-  Graph g = b.MakeGraph();
+  Graph g = b.MakeGraph(false);
   BenchmarkKernel(cli, g, ShiloachVishkin, PrintCompStats, CCVerifier);
   return 0;
 }

@@ -46,8 +46,10 @@ using namespace std;
 
 size_t OrderedCount(const Graph &g) {
   size_t total = 0;
-  #pragma omp parallel for reduction(+ : total) schedule(dynamic, 64)
+  //#pragma omp parallel for reduction(+ : total) schedule(dynamic, 64)
+  #pragma omp parallel for reduction(+ : total) schedule(static, 64)
   for (NodeID u=0; u < g.num_nodes(); u++) {
+    std::cout << u << ": Out_degree : " << g.out_degree(u) << "\n";
     for (NodeID v : g.out_neigh(u)) {
       if (v > u)
         break;
@@ -71,6 +73,8 @@ bool WorthRelabelling(const Graph &g) {
   int64_t average_degree = g.num_edges() / g.num_nodes();
   if (average_degree < 10)
     return false;
+
+  std::cout << "It is relabelling\n";
   SourcePicker<Graph> sp(g);
   int64_t num_samples = min(int64_t(1000), g.num_nodes());
   int64_t sample_total = 0;
@@ -88,8 +92,10 @@ bool WorthRelabelling(const Graph &g) {
 
 // uses heuristic to see if worth relabeling
 size_t Hybrid(const Graph &g) {
-  if (WorthRelabelling(g))
+  if (WorthRelabelling(g)) {
+    std::cout << "Relabelled\n";
     return OrderedCount(Builder::RelabelByDegree(g));
+  }
   else
     return OrderedCount(g);
 }
@@ -122,13 +128,27 @@ bool TCVerifier(const Graph &g, size_t test_total) {
   return total == test_total;
 }
 
+  std::string GetSuffix(std::string filename_) {
+    std::size_t suff_pos = filename_.rfind('.');
+    if (suff_pos == std::string::npos) {
+      std::cout << "Could't find suffix of " << filename_ << std::endl;
+      std::exit(-1);
+    }
+    return filename_.substr(suff_pos);
+  }
+
 
 int main(int argc, char* argv[]) {
   CLApp cli(argc, argv, "triangle count");
   if (!cli.ParseArgs())
     return -1;
   Builder b(cli);
-  Graph g = b.MakeGraph();
+  Graph g = b.MakeGraph(false);
+  std::string suffix = GetSuffix(cli.filename());
+  std::cout << suffix << "\n";
+  if(suffix == ".sgr"){
+    g.set_directed();
+  }
   if (g.directed()) {
     cout << "Input graph is directed but tc requires undirected" << endl;
     return -2;

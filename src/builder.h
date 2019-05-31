@@ -43,7 +43,8 @@ class BuilderBase {
   const CLBase &cli_;
   bool symmetrize_;
   bool needs_weights_;
-  int64_t num_nodes_ = -1;
+  //int64_t num_nodes_ = -1;
+  uint64_t num_nodes_ = 0;
 
  public:
   explicit BuilderBase(const CLBase &cli) : cli_(cli) {
@@ -126,6 +127,7 @@ class BuilderBase {
       }
     }
     prefix[degrees.size()] = bulk_prefix[num_blocks];
+    std::cerr << "prefix[0] : " << prefix[0] << " , prefix[last] : " << prefix[degrees.size()] << " nodes : " << degrees.size() << "\n";
     return prefix;
   }
 
@@ -207,7 +209,8 @@ class BuilderBase {
     DestID_ *neighs = nullptr, *inv_neighs = nullptr;
     Timer t;
     t.Start();
-    if (num_nodes_ == -1)
+    //if (num_nodes_ == -1)
+    if (num_nodes_ == 0)
       num_nodes_ = FindMaxNodeID(el)+1;
     if (needs_weights_)
       Generator<NodeID_, DestID_, WeightT_>::InsertWeights(el);
@@ -223,8 +226,117 @@ class BuilderBase {
                                                 inv_index, inv_neighs);
   }
 
-  CSRGraph<NodeID_, DestID_, invert> MakeGraph() {
+  CSRGraph<NodeID_, DestID_, invert> MakeGraphFromGR(std::string &filename, std::string &filename_transpose) {
+    DestID_ **index = nullptr, **inv_index = nullptr;
+    DestID_ *neighs = nullptr, *inv_neighs = nullptr;
+    Timer t;
+    t.Start();
+
+    std::ifstream in(filename);
+    if (!in.is_open()) {
+      std::cout << "Couldn't open file " << filename << std::endl;
+      std::exit(-2);
+    }
+
+    Timer timer_ggr;
+    timer_ggr.Start();
+    uint64_t header[4];
+    in.read(reinterpret_cast<char*>(header), sizeof(uint64_t) * 4);
+    uint64_t version = header[0];
+    uint32_t numNodes = header[2];
+    uint64_t numEdges = header[3];
+    std::cout<<"Disk: NumNodes: "<<numNodes<<" NumEdges: "<<numEdges<<"\n";
+    std::cerr<<"Disk: NumNodes: "<<numNodes<<" NumEdges: "<<numEdges<<"\n";
+
+    num_nodes_ = numNodes;
+    pvector<SGOffset> offsets(numNodes+1);
+    uint64_t readPosition = (4 * sizeof(uint64_t));
+    in.seekg(readPosition);
+    offsets[0] = 0;
+    in.read(reinterpret_cast<char*>(&offsets[1]), sizeof(SGOffset)*(numNodes));
+    std::cerr << " offsets[last]: " << offsets[numNodes] << "\n";
+
+    neighs = new DestID_[numEdges];
+    index = CSRGraph<NodeID_, DestID_>::GenIndex(offsets, neighs);
+
+    readPosition = ((4 + numNodes) * sizeof(uint64_t));
+    in.seekg(readPosition);
+    std::cout << "version = " << version << "\n";
+    std::cerr << "version = " << version << "\n";
+    if(version == 1) {
+      in.read(reinterpret_cast<char*>((neighs)), sizeof(uint32_t)*numEdges);
+      readPosition = ((4 + numNodes) * sizeof(uint64_t) + numEdges * sizeof(uint32_t));
+     // version 1 padding TODO make version agnostic
+      if (numEdges% 2) {
+        readPosition += sizeof(uint32_t);
+      }
+    } else if(version == 2) {
+      in.read(reinterpret_cast<char*>((neighs)), sizeof(uint64_t)*numEdges);
+      readPosition = ((4 + numNodes) * sizeof(uint64_t) + numEdges * sizeof(uint64_t));
+      if (numEdges % 2) {
+        readPosition += sizeof(uint64_t);
+      }
+    } else {
+      std::cerr << "ERROR: Unknown graph file version.\n";
+      abort();
+    }
+
+    std::cout << "Done constructing original graph\n";
+
+
+    std::ifstream in_transpose(filename_transpose);
+    std::cerr << "read transpose \n";
+    if (!in_transpose.is_open()) {
+      std::cout << "Couldn't open file " << filename_transpose << std::endl;
+      std::exit(-2);
+    }
+    readPosition = (4 * sizeof(uint64_t));
+    offsets[0] = 0;
+    in_transpose.seekg(readPosition);
+    in_transpose.read(reinterpret_cast<char*>(&offsets[1]), sizeof(SGOffset)*(numNodes));
+
+    std::cerr << "read transpose offset \n";
+    inv_neighs = new DestID_[numEdges];
+    inv_index = CSRGraph<NodeID_, DestID_>::GenIndex(offsets, inv_neighs);
+
+    std::cerr << "read transpose dst\n";
+    readPosition = ((4 + numNodes) * sizeof(uint64_t));
+    in_transpose.seekg(readPosition);
+    if(version == 1) {
+      in_transpose.read(reinterpret_cast<char*>((inv_neighs)), sizeof(uint32_t)*numEdges);
+      readPosition = ((4 + numNodes) * sizeof(uint64_t) + numEdges * sizeof(uint32_t));
+     // version 1 padding TODO make version agnostic
+      if (numEdges% 2) {
+        readPosition += sizeof(uint32_t);
+      }
+    } else if(version == 2) {
+      in_transpose.read(reinterpret_cast<char*>((inv_neighs)), sizeof(uint64_t)*numEdges);
+      readPosition = ((4 + numNodes) * sizeof(uint64_t) + numEdges * sizeof(uint64_t));
+      if (numEdges % 2) {
+        readPosition += sizeof(uint64_t);
+      }
+    } else {
+      std::cerr << "ERROR: Unknown graph file version.\n";
+      abort();
+    }
+
+    std::cout << "Done constructing transpose graph\n";
+
+    return CSRGraph<NodeID_, DestID_, invert>(num_nodes_, index, neighs,
+                                                inv_index, inv_neighs);
+  }
+
+
+
+  CSRGraph<NodeID_, DestID_, invert> MakeGraph(bool removeDuplicateEdges = true, bool useTranspose = false) {
     CSRGraph<NodeID_, DestID_, invert> g;
+    if(useTranspose){
+      std::string fname = cli_.filename();
+      std::string ftname = cli_.filename_transpose();
+      std::cout << "Original graph : " << fname << "\n";
+      std::cout << "Transpose graph : " << ftname << "\n";
+      g = MakeGraphFromGR(fname, ftname);
+    } else
     {  // extra scope to trigger earlier deletion of el (save memory)
       EdgeList el;
       if (cli_.filename() != "") {
@@ -239,8 +351,12 @@ class BuilderBase {
         el = gen.GenerateEL(cli_.uniform());
       }
       g = MakeGraphFromEL(el);
+
     }
-    return SquishGraph(g);
+    if(removeDuplicateEdges)
+      return SquishGraph(g);
+    else
+      return g;
   }
 
   // Relabels (and rebuilds) graph by order of decreasing degree

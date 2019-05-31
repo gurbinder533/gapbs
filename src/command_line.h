@@ -30,12 +30,13 @@ class CLBase {
   int argc_;
   char** argv_;
   std::string name_;
-  std::string get_args_ = "f:g:hk:su:";
+  std::string get_args_ = "f:p:g:hk:su:";
   std::vector<std::string> help_strings_;
 
   int scale_ = -1;
   int degree_ = 16;
   std::string filename_ = "";
+  std::string filenameTranpose_ = "";
   bool symmetrize_ = false;
   bool uniform_ = false;
 
@@ -57,6 +58,7 @@ class CLBase {
          argc_(argc), argv_(argv), name_(name) {
     AddHelpLine('h', "", "print this help message");
     AddHelpLine('f', "file", "load graph from file");
+    AddHelpLine('p', "file transpose", "load graph from file");
     AddHelpLine('s', "", "symmetrize input edge list", "false");
     AddHelpLine('g', "scale", "generate 2^scale kronecker graph");
     AddHelpLine('u', "scale", "generate 2^scale uniform-random graph");
@@ -82,6 +84,7 @@ class CLBase {
   void virtual HandleArg(signed char opt, char* opt_arg) {
     switch (opt) {
       case 'f': filename_ = std::string(opt_arg);           break;
+      case 'p': filenameTranpose_ = std::string(opt_arg);   break;
       case 'g': scale_ = atoi(opt_arg);                     break;
       case 'h': PrintUsage();                               break;
       case 'k': degree_ = atoi(opt_arg);                    break;
@@ -101,6 +104,7 @@ class CLBase {
   int scale() const { return scale_; }
   int degree() const { return degree_; }
   std::string filename() const { return filename_; }
+  std::string filename_transpose() const { return filenameTranpose_; }
   bool symmetrize() const { return symmetrize_; }
   bool uniform() const { return uniform_; }
 };
@@ -112,14 +116,18 @@ class CLApp : public CLBase {
   int num_trials_ = 16;
   int64_t start_vertex_ = -1;
   bool do_verify_ = false;
+  bool collect_emon_ = false;
+  std::string emon_datFile = "";
 
  public:
   CLApp(int argc, char** argv, std::string name) : CLBase(argc, argv, name) {
-    get_args_ += "an:r:v";
+    get_args_ += "an:r:v:e:q:";
     AddHelpLine('a', "", "output analysis of last run", "false");
     AddHelpLine('n', "n", "perform n trials", std::to_string(num_trials_));
     AddHelpLine('r', "node", "start from node r", "rand");
     AddHelpLine('v', "", "verify the output of each run", "false");
+    AddHelpLine('e', "", "collect emon numbers", "false");
+    AddHelpLine('q', "datFileName", "emon dat file name ", "emon.dat");
   }
 
   void HandleArg(signed char opt, char* opt_arg) override {
@@ -128,6 +136,8 @@ class CLApp : public CLBase {
       case 'n': num_trials_ = atoi(opt_arg);            break;
       case 'r': start_vertex_ = atol(opt_arg);          break;
       case 'v': do_verify_ = true;                      break;
+      case 'e': collect_emon_ = true;                   break;
+      case 'q': emon_datFile = std::string(opt_arg); std::cout << "here\n";  break;
       default: CLBase::HandleArg(opt, opt_arg);
     }
   }
@@ -136,6 +146,8 @@ class CLApp : public CLBase {
   int num_trials() const { return num_trials_; }
   int64_t start_vertex() const { return start_vertex_; }
   bool do_verify() const { return do_verify_; }
+  bool collectEmon() const { return collect_emon_; }
+  std::string emon_datFileName() const { return emon_datFile; }
 };
 
 

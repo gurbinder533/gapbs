@@ -56,6 +56,7 @@ pvector<WeightT> DeltaStep(const WGraph &g, NodeID source, WeightT delta) {
   Timer t;
   pvector<WeightT> dist(g.num_nodes(), kDistInf);
   dist[source] = 0;
+  std::cout << "Using Source: " << source << "\n"; 
   pvector<NodeID> frontier(g.num_edges_directed());
   // two element arrays for double buffering curr=iter&1, next=(iter+1)&1
   size_t shared_indexes[2] = {0, kMaxBin};
@@ -109,7 +110,7 @@ pvector<WeightT> DeltaStep(const WGraph &g, NodeID source, WeightT delta) {
       #pragma omp single nowait
       {
         t.Stop();
-        PrintStep(curr_bin_index, t.Millisecs(), curr_frontier_tail);
+        //PrintStep(curr_bin_index, t.Millisecs(), curr_frontier_tail);
         t.Start();
         curr_bin_index = kMaxBin;
         curr_frontier_tail = 0;
@@ -141,6 +142,7 @@ void PrintSSSPStats(const WGraph &g, const pvector<WeightT> &dist) {
 // Compares against simple serial implementation
 bool SSSPVerifier(const WGraph &g, NodeID source,
                   const pvector<WeightT> &dist_to_test) {
+  std::cout << "Inside verify\n";
   // Serial Dijkstra implementation to get oracle distances
   pvector<WeightT> oracle_dist(g.num_nodes(), kDistInf);
   oracle_dist[source] = 0;
@@ -160,9 +162,11 @@ bool SSSPVerifier(const WGraph &g, NodeID source,
       }
     }
   }
+  std::ofstream outfile ("output.txt");
   // Report any mismatches
   bool all_ok = true;
   for (NodeID n : g.vertices()) {
+    outfile << n << " " << dist_to_test[n] << "\n";
     if (dist_to_test[n] != oracle_dist[n]) {
       cout << n << ": " << dist_to_test[n] << " != " << oracle_dist[n] << endl;
       all_ok = false;
@@ -171,13 +175,25 @@ bool SSSPVerifier(const WGraph &g, NodeID source,
   return all_ok;
 }
 
+void sanity_check(const WGraph &g, const pvector<WeightT>& dist_to_test) {
+  std::cout << "Sanity checking\n";
+  WeightT max_dist = std::numeric_limits<WeightT>::min();
+  for (NodeID n : g.vertices()) {
+    if(dist_to_test[n] != kDistInf && max_dist < dist_to_test[n]) {
+      max_dist = dist_to_test[n];
+    }
+  }
+
+  std::cout << "max-dist : " << max_dist << "\n";
+  std::cout << "Node 1 has dist : " << dist_to_test[1] << "\n";
+}
 
 int main(int argc, char* argv[]) {
   CLDelta<WeightT> cli(argc, argv, "single-source shortest-path");
   if (!cli.ParseArgs())
     return -1;
   WeightedBuilder b(cli);
-  WGraph g = b.MakeGraph();
+  WGraph g = b.MakeGraph(false);
   SourcePicker<WGraph> sp(g, cli.start_vertex());
   auto SSSPBound = [&sp, &cli] (const WGraph &g) {
     return DeltaStep(g, sp.PickNext(), cli.delta());
@@ -186,6 +202,10 @@ int main(int argc, char* argv[]) {
   auto VerifierBound = [&vsp] (const WGraph &g, const pvector<WeightT> &dist) {
     return SSSPVerifier(g, vsp.PickNext(), dist);
   };
-  BenchmarkKernel(cli, g, SSSPBound, PrintSSSPStats, VerifierBound);
+  auto SanityCheck = [] (const WGraph &g, const pvector<WeightT> &dist) {
+    return sanity_check(g, dist);
+  };
+
+  BenchmarkKernel(cli, g, SSSPBound, PrintSSSPStats, VerifierBound, SanityCheck);
   return 0;
 }

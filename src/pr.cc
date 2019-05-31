@@ -28,13 +28,18 @@ updates in the pull direction to remove the need for atomics.
 
 using namespace std;
 
-typedef float ScoreT;
-const float kDamp = 0.85;
+//typedef float ScoreT;
+//const float kDamp = 0.85;
+
+typedef double ScoreT;
+const double kDamp = 0.85;
 
 pvector<ScoreT> PageRankPull(const Graph &g, int max_iters,
                              double epsilon = 0) {
-  const ScoreT init_score = 1.0f / g.num_nodes();
-  const ScoreT base_score = (1.0f - kDamp) / g.num_nodes();
+  //const ScoreT init_score = 1.0f / g.num_nodes();
+  const ScoreT init_score = (1.0f - kDamp);
+  //const ScoreT base_score = (1.0f - kDamp) / g.num_nodes();
+  const ScoreT base_score = (1.0f - kDamp);
   pvector<ScoreT> scores(g.num_nodes(), init_score);
   pvector<ScoreT> outgoing_contrib(g.num_nodes());
   for (int iter=0; iter < max_iters; iter++) {
@@ -51,7 +56,7 @@ pvector<ScoreT> PageRankPull(const Graph &g, int max_iters,
       scores[u] = base_score + kDamp * incoming_total;
       error += fabs(scores[u] - old_score);
     }
-    printf(" %2d    %lf\n", iter, error);
+    //printf(" %2d    %lf\n", iter, error);
     if (error < epsilon)
       break;
   }
@@ -64,11 +69,11 @@ void PrintTopScores(const Graph &g, const pvector<ScoreT> &scores) {
   for (NodeID n=0; n < g.num_nodes(); n++) {
     score_pairs[n] = make_pair(n, scores[n]);
   }
-  int k = 5;
+  int k = 20;
   vector<pair<ScoreT, NodeID>> top_k = TopK(score_pairs, k);
   k = min(k, static_cast<int>(top_k.size()));
   for (auto kvp : top_k)
-    cout << kvp.second << ":" << kvp.first << endl;
+    cout << kvp.first << " : " << kvp.second << endl;
 }
 
 
@@ -98,7 +103,8 @@ int main(int argc, char* argv[]) {
   if (!cli.ParseArgs())
     return -1;
   Builder b(cli);
-  Graph g = b.MakeGraph();
+  //Graph g = b.MakeGraph(false,true);
+  Graph g = b.MakeGraph(false);
   auto PRBound = [&cli] (const Graph &g) {
     return PageRankPull(g, cli.max_iters(), cli.tolerance());
   };

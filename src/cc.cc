@@ -220,7 +220,7 @@ int main(int argc, char* argv[]) {
   if (!cli.ParseArgs())
     return -1;
   Builder b(cli);
-  Graph g = b.MakeGraph();
+  Graph g = b.MakeGraph(false);
   auto CCBound = [](const Graph& gr){ return Afforest(gr); };
   BenchmarkKernel(cli, g, CCBound, PrintCompStats, CCVerifier);
   return 0;

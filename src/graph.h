@@ -158,6 +158,10 @@ class CSRGraph {
     ReleaseResources();
   }
 
+  void set_directed() {
+    std::cout << "setting directed flag\n";
+    directed_ = false;
+  }
   CSRGraph& operator=(CSRGraph&& other) {
     if (this != &other) {
       ReleaseResources();

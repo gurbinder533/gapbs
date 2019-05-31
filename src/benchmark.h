@@ -10,6 +10,7 @@
 #include <random>
 #include <utility>
 #include <vector>
+#include <unistd.h>
 
 #include "builder.h"
 #include "graph.h"
@@ -30,6 +31,9 @@ Various helper functions to ease writing of kernels
 // Default type signatures for commonly used types
 typedef int32_t NodeID;
 typedef int32_t WeightT;
+
+//typedef uint32_t NodeID;
+//typedef uint32_t WeightT;
 typedef NodeWeight<NodeID, WeightT> WNode;
 
 typedef CSRGraph<NodeID> Graph;
@@ -104,10 +108,36 @@ void BenchmarkKernel(const CLApp &cli, const GraphT_ &g,
   double total_seconds = 0;
   Timer trial_timer;
   for (int iter=0; iter < cli.num_trials(); iter++) {
+
+ /*
+   * Start emon collection
+   */
+    std::string emonDatFile = "/data3/results/emon_datFile/gaps/" + cli.emon_datFileName();
+    std::cout << "-----> " << cli.emon_datFileName() << "\n";
+    bool  collectEmon = cli.collectEmon();
+    if (collectEmon) {
+      std::cerr << "Collecting emonData in: " << emonDatFile << "\n";
+      uint64_t sleepTime=80000;
+      std::cerr << " STOP ANY PREV EMON runs " << collectEmon << "\n";
+      std::system("emon -stop");
+      std::cerr << " START EMON NOW " << collectEmon << "\n";
+      usleep(1000);
+      std::string emon_cmd = std::string("emon -i /data2/packages/AEP_perf_tools/SKX_edp/edp/edp-SKX-NDA-ADandMM-v3.7/ArchitectureSpecific/clx-2s-events.txt > ") + emonDatFile + std::string("&");
+      std::cerr << " EXECUTING START EMON COMMAND\n";
+      std::system(emon_cmd.c_str());
+      std::cerr << " EXECUTED EMON COMMAND\n";
+      usleep(sleepTime);
+    }
+
     trial_timer.Start();
     auto result = kernel(g);
     trial_timer.Stop();
     PrintTime("Trial Time", trial_timer.Seconds());
+
+    if (collectEmon) {
+      std::system("emon -stop");
+    }
+
     total_seconds += trial_timer.Seconds();
     if (cli.do_analysis() && (iter == (cli.num_trials()-1)))
       stats(g, result);
@@ -122,4 +152,33 @@ void BenchmarkKernel(const CLApp &cli, const GraphT_ &g,
   PrintTime("Average Time", total_seconds / cli.num_trials());
 }
 
+// Calls (and times) kernel according to command line arguments
+template<typename GraphT_, typename GraphFunc, typename AnalysisFunc,
+         typename VerifierFunc, typename SanityCheckFunc>
+void BenchmarkKernel(const CLApp &cli, const GraphT_ &g,
+                     GraphFunc kernel, AnalysisFunc stats,
+                     VerifierFunc verify, SanityCheckFunc sanityCheck) {
+  g.PrintStats();
+  double total_seconds = 0;
+  Timer trial_timer;
+  for (int iter=0; iter < cli.num_trials(); iter++) {
+    trial_timer.Start();
+    auto result = kernel(g);
+    trial_timer.Stop();
+    PrintTime("Trial Time", trial_timer.Seconds());
+    total_seconds += trial_timer.Seconds();
+    if (cli.do_analysis() && (iter == (cli.num_trials()-1)))
+      stats(g, result);
+    if (cli.do_verify()) {
+      trial_timer.Start();
+      PrintLabel("Verification",
+                 verify(std::ref(g), std::ref(result)) ? "PASS" : "FAIL");
+      trial_timer.Stop();
+      PrintTime("Verification Time", trial_timer.Seconds());
+    }
+    sanityCheck(g, result);
+  }
+  PrintTime("Average Time", total_seconds / cli.num_trials());
+
+}
 #endif  // BENCHMARK_H_
