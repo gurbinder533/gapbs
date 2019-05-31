@@ -84,3 +84,9 @@ How to Cite
 Please cite this code by the benchmark specification:
 
 Scott Beamer, Krste Asanović, David Patterson. [*The GAP Benchmark Suite*](http://arxiv.org/abs/1508.03619). arXiv:1508.03619 [cs.DC], 2015.
+
+Changes made
+-------------
+Support has been added to read binary CSR format files from the disk. Input is expected to have .gr extension. See the bash file for examples to run
+various applications.
+
